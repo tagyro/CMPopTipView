@@ -37,15 +37,11 @@
 @synthesize autoDismissTimer = _autoDismissTimer;
 @synthesize backgroundColor;
 @synthesize delegate;
-@synthesize title;
 @synthesize message;
 @synthesize customView;
 @synthesize targetObject;
-@synthesize titleColor;
-@synthesize titleFont;
 @synthesize textColor;
 @synthesize textFont;
-@synthesize titleAlignment;
 @synthesize textAlignment;
 @synthesize borderColor;
 @synthesize borderWidth;
@@ -54,7 +50,6 @@
 @synthesize disableTapToDismiss;
 @synthesize dismissTapAnywhere;
 @synthesize dismissTarget=_dismissTarget;
-@synthesize preferredPointDirection=_preferredPointDirection;
 
 - (CGRect)bubbleFrame {
 	CGRect bubbleFrame;
@@ -229,28 +224,11 @@
 	
 	CGPathRelease(bubblePath);
 	
-	// Draw title and text
-    
-    if (self.title) {
-        [self.titleColor set];
-        CGRect titleFrame = [self contentFrame];
-        [self.title drawInRect:titleFrame
-                      withFont:self.titleFont
-                 lineBreakMode:UILineBreakModeClip
-                     alignment:self.titleAlignment];
-    }
+	// Draw text
 	
 	if (self.message) {
 		[textColor set];
 		CGRect textFrame = [self contentFrame];
-        
-        // Move down to make room for title
-        if (self.title) {
-            textFrame.origin.y += [self.title sizeWithFont:self.titleFont
-                                         constrainedToSize:CGSizeMake(textFrame.size.width, 99999.0)
-                                             lineBreakMode:UILineBreakModeClip].height;
-        }
-        
         [self.message drawInRect:textFrame
                         withFont:textFont
                    lineBreakMode:UILineBreakModeWordWrap
@@ -267,7 +245,7 @@
     // an invisible button over the background.
     if ( self.dismissTapAnywhere ) {
         self.dismissTarget = [UIButton buttonWithType:UIButtonTypeCustom];
-        [self.dismissTarget addTarget:self action:@selector(dismissTapAnywhereFired:) forControlEvents:UIControlEventTouchUpInside];
+        [self.dismissTarget addTarget:self action:@selector(touchesBegan:withEvent:) forControlEvents:UIControlEventTouchUpInside];
         [self.dismissTarget setTitle:@"" forState:UIControlStateNormal];
         self.dismissTarget.frame = containerView.bounds;
         [containerView addSubview:self.dismissTarget];
@@ -317,11 +295,6 @@
     if (self.customView != nil) {
         textSize = self.customView.frame.size;
     }
-    if (self.title != nil) {
-        textSize.height += [self.title sizeWithFont:self.titleFont
-                                  constrainedToSize:CGSizeMake(rectWidth, 99999.0)
-                                      lineBreakMode:UILineBreakModeClip].height;
-    }
     
 	bubbleSize = CGSizeMake(textSize.width + cornerRadius*2, textSize.height + cornerRadius*2);
 	
@@ -334,39 +307,27 @@
     
 	CGFloat pointerY;	// Y coordinate of pointer target (within containerView)
 	
-    
-    if (targetRelativeOrigin.y+targetView.bounds.size.height < containerRelativeOrigin.y) {
-        pointerY = 0.0;
-        pointDirection = PointDirectionUp;
-    }
-    else if (targetRelativeOrigin.y > containerRelativeOrigin.y+containerView.bounds.size.height) {
-        pointerY = containerView.bounds.size.height;
-        pointDirection = PointDirectionDown;
-    }
-    else {
-        pointDirection = _preferredPointDirection;
-        CGPoint targetOriginInContainer = [targetView convertPoint:CGPointMake(0.0, 0.0) toView:containerView];
-        CGFloat sizeBelow = containerView.bounds.size.height - targetOriginInContainer.y;
-        if (pointDirection == PointDirectionAny) {
-            if (sizeBelow > targetOriginInContainer.y) {
-                pointerY = targetOriginInContainer.y + targetView.bounds.size.height;
-                pointDirection = PointDirectionUp;
-            }
-            else {
-                pointerY = targetOriginInContainer.y;
-                pointDirection = PointDirectionDown;
-            }
-        }
-        else {
-            if (pointDirection == PointDirectionDown) {
-                pointerY = targetOriginInContainer.y;
-            }
-            else {
-                pointerY = targetOriginInContainer.y + targetView.bounds.size.height;
-            }
-        }
-    }
-    
+	if (targetRelativeOrigin.y+targetView.bounds.size.height < containerRelativeOrigin.y) {
+		pointerY = 0.0;
+		pointDirection = PointDirectionUp;
+	}
+	else if (targetRelativeOrigin.y > containerRelativeOrigin.y+containerView.bounds.size.height) {
+		pointerY = containerView.bounds.size.height;
+		pointDirection = PointDirectionDown;
+	}
+	else {
+		CGPoint targetOriginInContainer = [targetView convertPoint:CGPointMake(0.0, 0.0) toView:containerView];
+		CGFloat sizeBelow = containerView.bounds.size.height - targetOriginInContainer.y;
+		if (sizeBelow > targetOriginInContainer.y) {
+			pointerY = targetOriginInContainer.y + targetView.bounds.size.height;
+			pointDirection = PointDirectionUp;
+		}
+		else {
+			pointerY = targetOriginInContainer.y;
+			pointDirection = PointDirectionDown;
+		}
+	}
+	
 	CGFloat W = containerView.bounds.size.width;
 	
 	CGPoint p = [targetView.superview convertPoint:targetView.center toView:containerView];
@@ -455,7 +416,7 @@
 	}
 	
 	if (nil == containerView) {
-		NSLog(@"Cannot determine container view from UIBarButtonItem: %@", barButtonItem);
+		//NSLog(@"Cannot determine container view from UIBarButtonItem: %@", barButtonItem);
 		self.targetObject = nil;
 		return;
 	}
@@ -502,13 +463,13 @@
 }
 
 - (void)autoDismissAnimatedDidFire:(NSTimer *)theTimer {
-    NSNumber *animated = [[theTimer userInfo] objectForKey:@"animated"];
+    NSNumber *animated = [theTimer userInfo][@"animated"];
     [self dismissAnimated:[animated boolValue]];
 	[self notifyDelegatePopTipViewWasDismissedByUser];
 }
 
 - (void)autoDismissAnimated:(BOOL)animated atTimeInterval:(NSTimeInterval)timeInvertal {
-    NSDictionary * userInfo = [NSDictionary dictionaryWithObject:[NSNumber numberWithBool:animated] forKey:@"animated"];
+    NSDictionary * userInfo = @{@"animated": @(animated)};
     
     self.autoDismissTimer = [NSTimer scheduledTimerWithTimeInterval:timeInvertal
 															 target:self
@@ -528,17 +489,7 @@
 		[super touchesBegan:touches withEvent:event];
 		return;
 	}
-
-	[self dismissByUser];
-}
-
-- (void)dismissTapAnywhereFired:(UIButton *)button
-{
-	[self dismissByUser];
-}
-
-- (void)dismissByUser
-{
+	
 	highlight = YES;
 	[self setNeedsDisplay];
 	
@@ -573,7 +524,6 @@
         self.borderColor = [UIColor blackColor];
         self.animation = CMPopTipAnimationSlide;
         self.dismissTapAnywhere = NO;
-        self.preferredPointDirection = PointDirectionAny;
     }
     return self;
 }
@@ -582,28 +532,21 @@
   return pointDirection;
 }
 
-- (id)initWithTitle:(NSString *)titleToShow message:(NSString *)messageToShow {
-	CGRect frame = CGRectZero;
-	
-	if ((self = [self initWithFrame:frame])) {
-        self.title = titleToShow;
-		self.message = messageToShow;
-        
-        self.titleFont = [UIFont boldSystemFontOfSize:16.0];
-        self.titleColor = [UIColor whiteColor];
-        self.titleAlignment = UITextAlignmentCenter;
-        self.textFont = [UIFont systemFontOfSize:14.0];
-		self.textColor = [UIColor whiteColor];
-
-	}
-	return self;
-}
-
 - (id)initWithMessage:(NSString *)messageToShow {
 	CGRect frame = CGRectZero;
 	
 	if ((self = [self initWithFrame:frame])) {
 		self.message = messageToShow;
+        
+        // only for test automation
+        // TODO: maybe there is a better solution??
+        // UILabel didn't work, because (text == AccessibilityLabel) there
+        messageText = [[[UITextField alloc] initWithFrame:frame] autorelease];
+        [messageText setHidden:YES];
+        [messageText setIsAccessibilityElement:YES];
+        [messageText setAccessibilityLabel:@"Hinweistext"];
+        [messageText setText:self.message];
+        [self addSubview:messageText];
 	}
 	return self;
 }
@@ -624,11 +567,8 @@
 	[backgroundColor release];
     [borderColor release];
     [customView release];
-    [title release];
 	[message release];
 	[targetObject release];
-    [titleColor release];
-    [titleFont release];
 	[textColor release];
 	[textFont release];
 	
